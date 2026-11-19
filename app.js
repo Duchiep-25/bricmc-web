@@ -13,6 +13,16 @@ const SERVER_CONFIG = {
   combatSeconds: 15,
   voiceChatUrl: "https://20.249.17.241.sslip.io/",
   discordUrl: "https://discord.gg/mRwDYFe6g",
+  adminPassword: "250508",
+
+  // ---- CẤU HÌNH TÀI KHOẢN NGÂN HÀNG NHẬN MÃ QR (VIETQR) ----
+  bank: {
+    bankId: "MB",                    // Mã ngân hàng: MB, VCB, TCB, ACB, BIDV, VPB, TPB, ICB, AGRIBANK...
+    bankDisplayName: "MB Bank (Quân Đội)",
+    accountNo: "0338837876",         // <-- THAY SỐ TÀI KHOẢN CỦA BẠN VÀO ĐÂY
+    accountName: "NGUYEN DUC HIEP",  // <-- TÊN CHỦ TÀI KHOẢN (VIẾT HOA KHÔNG DẤU)
+    customQrImage: "",               // Tùy chọn: Nếu muốn dùng ảnh QR tĩnh có sẵn, đặt file ảnh cạnh index.html và điền tên (VD: "qr.png")
+  },
 };
 
 // ---- Rank Definitions ----
@@ -39,12 +49,19 @@ const TEAMS = {
 let currentRank = "guest";
 let currentTeam = "none";
 let currentPlayerName = "Steve";
+let isAdminUnlocked = false;
+let currentPaymentState = {
+  itemName: "",
+  amount: 0,
+  code: "",
+};
 
 // ============================================================
 // INIT
 // ============================================================
 document.addEventListener("DOMContentLoaded", () => {
   applyServerConfig();
+  restoreAdminSession();
   lucide.createIcons();
   initNavbar();
   initMobileMenu();
@@ -64,12 +81,10 @@ document.addEventListener("DOMContentLoaded", () => {
 function applyServerConfig() {
   document.title = `${SERVER_CONFIG.serverName} — Máy Chủ Minecraft Bedrock Sinh Tồn & PvP`;
 
-  // Sync Server Name
   document.querySelectorAll("[data-server-name]").forEach((el) => {
     el.textContent = SERVER_CONFIG.serverName;
   });
 
-  // Sync IP & Port
   document.querySelectorAll("[data-ip-only]").forEach((el) => {
     el.textContent = SERVER_CONFIG.ip;
   });
@@ -85,7 +100,6 @@ function applyServerConfig() {
     ipDisplay.innerHTML = `<span data-ip-only>${SERVER_CONFIG.ip}</span><span class="text-gray-500">:</span><span data-port-only>${SERVER_CONFIG.port}</span>`;
   }
 
-  // Sync Voice Chat links & text
   document.querySelectorAll("[data-voice-link]").forEach((el) => {
     el.setAttribute("href", SERVER_CONFIG.voiceChatUrl);
   });
@@ -93,7 +107,6 @@ function applyServerConfig() {
     el.textContent = SERVER_CONFIG.voiceChatUrl;
   });
 
-  // Sync Discord links & text
   document.querySelectorAll("[data-discord-link]").forEach((el) => {
     el.setAttribute("href", SERVER_CONFIG.discordUrl);
   });
@@ -101,13 +114,61 @@ function applyServerConfig() {
     el.textContent = SERVER_CONFIG.discordUrl;
   });
 
-  // Sync Price per Block & World Border
   document.querySelectorAll("[data-price-per-block]").forEach((el) => {
     el.textContent = `$${SERVER_CONFIG.pricePerBlock} / block`;
   });
   document.querySelectorAll("[data-world-border]").forEach((el) => {
     el.textContent = `±${SERVER_CONFIG.worldBorder.toLocaleString("vi-VN")} block`;
   });
+}
+
+// ============================================================
+// ADMIN PASSWORD LOCK / UNLOCK (250508)
+// ============================================================
+function restoreAdminSession() {
+  if (sessionStorage.getItem("bricmc_admin_unlocked") === "true") {
+    isAdminUnlocked = true;
+    const lockScreen = document.getElementById("admin-lock-screen");
+    const unlockedContent = document.getElementById("admin-unlocked-content");
+    if (lockScreen) lockScreen.classList.add("hidden");
+    if (unlockedContent) unlockedContent.classList.remove("hidden");
+  }
+}
+
+function unlockAdminPanel(e) {
+  if (e) e.preventDefault();
+  const inputEl = document.getElementById("admin-password-input");
+  const errorEl = document.getElementById("admin-password-error");
+  if (!inputEl) return;
+
+  if (inputEl.value.trim() === SERVER_CONFIG.adminPassword) {
+    isAdminUnlocked = true;
+    sessionStorage.setItem("bricmc_admin_unlocked", "true");
+    if (errorEl) errorEl.classList.add("hidden");
+    inputEl.value = "";
+
+    document.getElementById("admin-lock-screen")?.classList.add("hidden");
+    document.getElementById("admin-unlocked-content")?.classList.remove("hidden");
+    showToast("Đã mở khóa khu vực Quản Trị Viên!", "success");
+  } else {
+    if (errorEl) errorEl.classList.remove("hidden");
+    inputEl.focus();
+    inputEl.select();
+  }
+}
+
+function lockAdminPanel() {
+  isAdminUnlocked = false;
+  sessionStorage.removeItem("bricmc_admin_unlocked");
+  document.getElementById("admin-unlocked-content")?.classList.add("hidden");
+  document.getElementById("admin-lock-screen")?.classList.remove("hidden");
+  showToast("Đã khóa khu vực Admin.", "info");
+}
+
+function toggleAdminPasswordVisibility() {
+  const inputEl = document.getElementById("admin-password-input");
+  if (!inputEl) return;
+  inputEl.type = inputEl.type === "password" ? "text" : "password";
 }
 
 // ============================================================
@@ -174,7 +235,7 @@ function initMobileMenu() {
 }
 
 // ============================================================
-// CLIPBOARD HELPERS (IP, VOICE CHAT, DISCORD)
+// CLIPBOARD HELPERS
 // ============================================================
 function copyTextToClipboard(text, successHtml) {
   navigator.clipboard.writeText(text).then(() => {
@@ -390,6 +451,9 @@ function initWikiTabs() {
       document.querySelectorAll(".wiki-panel").forEach((p) => {
         p.classList.toggle("hidden", p.id !== target);
       });
+      if (target === "admin-panel" && !isAdminUnlocked) {
+        setTimeout(() => document.getElementById("admin-password-input")?.focus(), 100);
+      }
     });
   });
 }
@@ -443,7 +507,7 @@ function initAdminFilters() {
         (b) => b.dataset.filter
       );
 
-      document.querySelectorAll("#admin-panel .cmd-group").forEach((group) => {
+      document.querySelectorAll("#admin-unlocked-content .cmd-group").forEach((group) => {
         const groupPlugin = group.dataset.plugin;
         if (activeFilters.includes("all") || activeFilters.length === 0) {
           group.style.display = "";
@@ -474,17 +538,67 @@ function previewRank(rankId) {
 }
 
 // ============================================================
-// PAYMENT MODAL
+// QR PAYMENT MODAL (VIETQR / CUSTOM QR)
 // ============================================================
-function openPaymentModal(itemName, itemPrice) {
+function openPaymentModal(itemName, vndAmount, itemCode) {
+  currentPaymentState = {
+    itemName,
+    amount: Number(vndAmount) || 0,
+    code: itemCode || "GOI",
+  };
+
   const modal = document.getElementById("payment-modal");
   const modalTitle = document.getElementById("modal-item-name");
   const modalPrice = document.getElementById("modal-item-price");
+  const playerInput = document.getElementById("qr-player-name");
 
   if (modalTitle) modalTitle.textContent = itemName;
-  if (modalPrice) modalPrice.textContent = itemPrice || "";
+  if (modalPrice) modalPrice.textContent = `${currentPaymentState.amount.toLocaleString("vi-VN")}đ`;
+  if (playerInput && !playerInput.value) {
+    playerInput.value = currentPlayerName || "Steve";
+  }
+
+  document.getElementById("qr-bank-name").textContent = SERVER_CONFIG.bank.bankDisplayName;
+  document.getElementById("qr-account-name").textContent = SERVER_CONFIG.bank.accountName;
+  document.getElementById("qr-account-no").textContent = SERVER_CONFIG.bank.accountNo;
+
+  updateQrTransferInfo();
+
   if (modal) modal.classList.add("show");
   document.body.style.overflow = "hidden";
+}
+
+function updateQrTransferInfo() {
+  const playerInput = document.getElementById("qr-player-name");
+  const rawName = (playerInput?.value || "Steve").trim() || "Steve";
+  const cleanName = rawName.replace(/[^a-zA-Z0-9_ ]/g, "").trim() || "Steve";
+  const transferNote = `${SERVER_CONFIG.serverName} ${currentPaymentState.code} ${cleanName}`;
+
+  const noteEl = document.getElementById("qr-transfer-note");
+  if (noteEl) noteEl.textContent = transferNote;
+
+  const qrImg = document.getElementById("qr-code-img");
+  if (!qrImg) return;
+
+  if (SERVER_CONFIG.bank.customQrImage) {
+    qrImg.src = SERVER_CONFIG.bank.customQrImage;
+  } else {
+    const { bankId, accountNo, accountName } = SERVER_CONFIG.bank;
+    const amount = currentPaymentState.amount;
+    qrImg.src = `https://img.vietqr.io/image/${encodeURIComponent(bankId)}-${encodeURIComponent(accountNo)}-compact2.png?amount=${amount}&addInfo=${encodeURIComponent(transferNote)}&accountName=${encodeURIComponent(accountName)}`;
+  }
+}
+
+function copyBankAccount() {
+  copyTextToClipboard(
+    SERVER_CONFIG.bank.accountNo,
+    `Đã sao chép số tài khoản: <strong>${SERVER_CONFIG.bank.accountNo}</strong>`
+  );
+}
+
+function copyTransferNote() {
+  const note = document.getElementById("qr-transfer-note")?.textContent || "";
+  copyTextToClipboard(note, `Đã sao chép nội dung CK: <strong>${note}</strong>`);
 }
 
 function closePaymentModal() {
