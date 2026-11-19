@@ -230,7 +230,7 @@
               <span class="sb-chip rank-chip active" data-rank="guest">Guest</span>
               <span class="sb-chip rank-chip" data-rank="member">Member</span>
               <span class="sb-chip rank-chip" data-rank="vip">VIP</span>
-              <span class="sb-chip rank-chip" data-rank="mvp">MVP</span>
+              <span class="sb-chip rank-chip" data-rank="bric">BRIC</span>
               <span class="sb-chip rank-chip" data-rank="admin">Admin</span>
               <span class="sb-chip rank-chip" data-rank="owner">Owner</span>
             </div>
@@ -677,7 +677,7 @@
           </div>
           <div class="cmd-row">
             <code class="cmd-code">/rank list</code>
-            <span class="cmd-desc">Xem danh sách tất cả Rank hiện có (Mặc định: <code class="text-xs font-mono text-gray-300">guest, member, vip, mvp, admin, owner</code>)</span>
+            <span class="cmd-desc">Xem danh sách tất cả Rank hiện có (Bao gồm: <code class="text-xs font-mono text-gray-300">guest, member, vip, bric, mvp, admin, owner</code>)</span>
             <button class="cmd-copy-btn" onclick="copyCommand('/rank list')" title="Sao chép"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button>
           </div>
           <div class="cmd-row">
@@ -941,6 +941,11 @@
               <span class="cmd-desc">Tra cứu nhanh trong game toàn bộ mã Enchant hiện có (bao gồm cả Enchant tự tạo)</span>
               <button class="cmd-copy-btn" onclick="copyCommand('/ce list')" title="Sao chép"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button>
             </div>
+            <div class="cmd-row">
+              <code class="cmd-code">/donate approve &lt;mã_đơn&gt;</code>
+              <span class="cmd-desc">Duyệt thủ công đơn nạp QR trên Web nếu người chơi chuyển khoản quên ghi mã đơn (VD: <code class="text-xs font-mono text-gold">/donate approve BRIC1234</code>)</span>
+              <button class="cmd-copy-btn" onclick="copyCommand('/donate approve ')" title="Sao chép"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button>
+            </div>
           </div>
 
           <!-- 5 Bộ Mẫu có sẵn (Preset) -->
@@ -1006,7 +1011,6 @@
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-white/5 text-gray-300">
-                  <!-- Nhóm 1: Công cụ khai thác -->
                   <tr>
                     <td class="py-2 px-2 text-cyan-400 font-medium">Khai thác</td>
                     <td class="py-2 px-2 font-mono text-cyan-300">drill</td>
@@ -1042,7 +1046,6 @@
                     <td class="py-2 px-2 font-mono">III</td>
                     <td class="py-2 px-2 text-gray-400">Cấp hiệu ứng Haste I–III giúp vung cúp/xẻng siêu nhanh khi đang đào.</td>
                   </tr>
-                  <!-- Nhóm 2: Vũ khí & Trùy -->
                   <tr>
                     <td class="py-2 px-2 text-red-400 font-medium">Vũ khí</td>
                     <td class="py-2 px-2 font-mono text-cyan-300">lifesteal</td>
@@ -1092,7 +1095,6 @@
                     <td class="py-2 px-2 font-mono">III</td>
                     <td class="py-2 px-2 text-gray-400">Tỷ lệ 20%–60% gây hiệu ứng Khô Héo (Wither) rút máu mục tiêu trong 4 giây.</td>
                   </tr>
-                  <!-- Nhóm 3: Giáp trụ -->
                   <tr>
                     <td class="py-2 px-2 text-emerald-400 font-medium">Giáp trụ</td>
                     <td class="py-2 px-2 font-mono text-cyan-300">overload</td>
@@ -1274,12 +1276,12 @@
             </div>
             <div class="cmd-row">
               <code class="cmd-code">/rank set &lt;tên_người_chơi&gt; &lt;mã_rank&gt;</code>
-              <span class="cmd-desc">Cấp Rank cho người chơi (cập nhật ngay trên đầu nhân vật, Scoreboard và trong chat)</span>
+              <span class="cmd-desc">Cấp Rank cho người chơi (VD: <code class="text-xs font-mono text-cyan-300">/rank set Hiep bric</code> — cập nhật ngay trên đầu nhân vật, Scoreboard và trong chat)</span>
               <button class="cmd-copy-btn" onclick="copyCommand('/rank set ')" title="Sao chép"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button>
             </div>
             <div class="cmd-row">
               <code class="cmd-code">/rank create &lt;mã_id&gt; &lt;Tên_Màu&gt;</code>
-              <span class="cmd-desc">Tạo thêm một Rank mới bất kỳ (VD: <code class="text-xs font-mono text-gold">/rank create king &amp;6&amp;lVUA</code>)</span>
+              <span class="cmd-desc">Tạo thêm một Rank mới bất kỳ (VD: <code class="text-xs font-mono text-gold">/rank create bric &amp;b&amp;lBRIC</code>)</span>
               <button class="cmd-copy-btn" onclick="copyCommand('/rank create ')" title="Sao chép"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button>
             </div>
             <div class="cmd-row">
@@ -1354,7 +1356,7 @@
   </div>
 </section>
 
-<!-- ========== RANK STORE (WITH DIRECT BANK QR CODE) ========== -->
+<!-- ========== RANK STORE (AUTO QR PAYMENT) ========== -->
 <section id="store" class="py-20 lg:py-28 relative" style="background: linear-gradient(180deg, transparent, rgba(245,158,11,0.02) 50%, transparent);">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
     <!-- Header -->
@@ -1363,7 +1365,7 @@
         <i data-lucide="crown" class="w-3.5 h-3.5"></i> Rank Store
       </div>
       <h2 class="section-title text-white">Cửa Hàng <span class="text-gold">Rank &amp; Quyền Lợi</span></h2>
-      <p class="section-subtitle mx-auto mt-3">Chọn gói muốn nâng cấp và quét mã QR chuyển khoản trực tiếp để kích hoạt nhanh.</p>
+      <p class="section-subtitle mx-auto mt-3">Chọn gói muốn nâng cấp và quét mã QR chuyển khoản tự động — vào server nhận đặc quyền ngay lập tức.</p>
     </div>
 
     <!-- Rank Cards -->
@@ -1385,16 +1387,16 @@
         <button onclick="showToast('Member là Rank mặc định — bạn đã có sẵn!', 'info')" class="btn-rank-buy bg-green-500/20 text-green-400 hover:bg-green-500/30">Rank Mặc Định</button>
       </div>
 
-      <!-- VIP -->
+      <!-- VIP (50K Monney, KHÔNG chọn đạo cụ) -->
       <div class="rank-card glass featured" style="border-color: rgba(245,158,11,0.3);">
         <div class="rank-badge text-yellow-400 mb-2">[VIP]</div>
         <h3 class="text-white text-xl font-bold mb-1">VIP</h3>
-        <p class="text-gray-500 text-sm mb-4">Nổi bật &amp; nhiều đặc quyền</p>
+        <p class="text-gray-500 text-sm mb-4">Nổi bật &amp; nhận ngay 50K Monney</p>
         <div class="rank-price text-gold mb-6">20.000đ</div>
         <div class="space-y-2.5 mb-6">
           <div class="rank-perk"><i data-lucide="check" class="w-4 h-4 text-gold"></i><span>NameTag màu vàng nổi bật <code class="text-xs font-mono text-yellow-400">[VIP]</code></span></div>
+          <div class="rank-perk"><i data-lucide="check" class="w-4 h-4 text-gold"></i><span>Nhận ngay <strong class="text-gold">50K Monney</strong> vào tài khoản</span></div>
           <div class="rank-perk"><i data-lucide="check" class="w-4 h-4 text-gold"></i><span>Tất cả quyền lợi Member</span></div>
-          <div class="rank-perk"><i data-lucide="check" class="w-4 h-4 text-gold"></i><span>Bonus Monney khi mới vào server</span></div>
           <div class="rank-perk"><i data-lucide="check" class="w-4 h-4 text-gold"></i><span>Chìa khóa Crates VIP hàng tuần</span></div>
           <div class="rank-perk"><i data-lucide="check" class="w-4 h-4 text-gold"></i><span>Ưu tiên slot khi server đầy</span></div>
         </div>
@@ -1404,42 +1406,42 @@
         </button>
       </div>
 
-      <!-- MVP -->
+      <!-- BRIC (Thay thẻ MVP thành BRIC, 500K Monney + Chọn 1 đạo cụ DonutForge) -->
       <div class="rank-card glass">
-        <div class="rank-badge text-cyan-400 mb-2">[MVP]</div>
-        <h3 class="text-white text-xl font-bold mb-1">MVP</h3>
-        <p class="text-gray-500 text-sm mb-4">Cao cấp nhất cho người chơi</p>
+        <div class="rank-badge text-cyan-400 mb-2">[BRIC]</div>
+        <h3 class="text-white text-xl font-bold mb-1">BRIC</h3>
+        <p class="text-gray-500 text-sm mb-4">Cao cấp nhất • 500K Monney + Đạo cụ</p>
         <div class="rank-price text-cyan-400 mb-6">50.000đ</div>
         <div class="space-y-2.5 mb-6">
-          <div class="rank-perk"><i data-lucide="check" class="w-4 h-4 text-cyan-400"></i><span>NameTag màu xanh cyan đặc biệt <code class="text-xs font-mono text-cyan-400">[MVP]</code></span></div>
+          <div class="rank-perk"><i data-lucide="check" class="w-4 h-4 text-cyan-400"></i><span>NameTag màu xanh cyan đặc biệt <code class="text-xs font-mono text-cyan-400">[BRIC]</code></span></div>
+          <div class="rank-perk"><i data-lucide="check" class="w-4 h-4 text-cyan-400"></i><span>Nhận ngay <strong class="text-cyan-300">500K Monney</strong> vào tài khoản</span></div>
+          <div class="rank-perk"><i data-lucide="check" class="w-4 h-4 text-cyan-400"></i><span>Tự chọn <strong class="text-white">1 Đạo cụ DonutForge</strong> (Cúp, Kiếm, Trùy, Xẻng hoặc Giáp)</span></div>
           <div class="rank-perk"><i data-lucide="check" class="w-4 h-4 text-cyan-400"></i><span>Tất cả quyền lợi VIP</span></div>
-          <div class="rank-perk"><i data-lucide="check" class="w-4 h-4 text-cyan-400"></i><span>Bonus Monney x2 khi mới vào</span></div>
-          <div class="rank-perk"><i data-lucide="check" class="w-4 h-4 text-cyan-400"></i><span>Chìa khóa Crates MVP hàng tuần</span></div>
-          <div class="rank-perk"><i data-lucide="check" class="w-4 h-4 text-cyan-400"></i><span>Truy cập sớm tính năng mới</span></div>
+          <div class="rank-perk"><i data-lucide="check" class="w-4 h-4 text-cyan-400"></i><span>Chìa khóa Crates BRIC hàng tuần</span></div>
           <div class="rank-perk"><i data-lucide="check" class="w-4 h-4 text-cyan-400"></i><span>Hỗ trợ ưu tiên từ Admin</span></div>
         </div>
-        <button onclick="previewRank('mvp')" class="btn-rank-preview mb-2">👁 Xem Thử Trên NameTag</button>
-        <button onclick="openPaymentModal('Rank MVP', 50000, 'MVP')" class="btn-rank-buy bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30">
+        <button onclick="previewRank('bric')" class="btn-rank-preview mb-2">👁 Xem Thử Trên NameTag</button>
+        <button onclick="openPaymentModal('Rank BRIC', 50000, 'BRIC')" class="btn-rank-buy bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30">
           <i data-lucide="qr-code" class="w-4 h-4"></i> Quét QR Mua Ngay
         </button>
       </div>
     </div>
 
-    <!-- Monney & Crates -->
+    <!-- Monney & Crates (100K = 10k, 300K = 30k, giữ nguyên gói Key, KHÔNG chọn đạo cụ) -->
     <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 fade-up">
       <div class="mini-card glass rounded-xl">
         <div class="text-2xl mb-2">💰</div>
-        <div class="text-white font-bold text-sm">Gói 50K Monney</div>
+        <div class="text-white font-bold text-sm">Gói 100K Monney</div>
         <div class="text-gold font-mono text-lg font-bold mt-1">10.000đ</div>
-        <button onclick="openPaymentModal('Gói 50K Monney', 10000, '50K')" class="mt-3 w-full text-xs py-2 rounded-lg bg-white/5 text-gray-300 hover:text-white hover:bg-white/10 transition-all border border-white/10 cursor-pointer flex items-center justify-center gap-1.5">
+        <button onclick="openPaymentModal('Gói 100K Monney', 10000, '100K')" class="mt-3 w-full text-xs py-2 rounded-lg bg-white/5 text-gray-300 hover:text-white hover:bg-white/10 transition-all border border-white/10 cursor-pointer flex items-center justify-center gap-1.5">
           <i data-lucide="qr-code" class="w-3.5 h-3.5 text-gold"></i> Quét QR Mua
         </button>
       </div>
       <div class="mini-card glass rounded-xl">
         <div class="text-2xl mb-2">💎</div>
-        <div class="text-white font-bold text-sm">Gói 200K Monney</div>
+        <div class="text-white font-bold text-sm">Gói 300K Monney</div>
         <div class="text-gold font-mono text-lg font-bold mt-1">30.000đ</div>
-        <button onclick="openPaymentModal('Gói 200K Monney', 30000, '200K')" class="mt-3 w-full text-xs py-2 rounded-lg bg-white/5 text-gray-300 hover:text-white hover:bg-white/10 transition-all border border-white/10 cursor-pointer flex items-center justify-center gap-1.5">
+        <button onclick="openPaymentModal('Gói 300K Monney', 30000, '300K')" class="mt-3 w-full text-xs py-2 rounded-lg bg-white/5 text-gray-300 hover:text-white hover:bg-white/10 transition-all border border-white/10 cursor-pointer flex items-center justify-center gap-1.5">
           <i data-lucide="qr-code" class="w-3.5 h-3.5 text-gold"></i> Quét QR Mua
         </button>
       </div>
@@ -1571,21 +1573,21 @@
       </div>
     </div>
 
-    <!-- Step 1: Nhập tên & Chọn đạo cụ -->
+    <!-- Step 1: Nhập tên & Chọn đạo cụ (Chỉ hiện khi chọn gói BRIC) -->
     <div id="qr-setup-step" class="space-y-3 mb-4">
       <div>
         <label for="qr-player-name" class="block text-xs font-semibold text-gray-300 mb-1.5">
-          1. Nhập chính xác tên nhân vật trong game (kể cả khoảng trắng):
+          Nhập chính xác tên nhân vật trong game (kể cả khoảng trắng):
         </label>
         <input id="qr-player-name" type="text" maxlength="24" placeholder="VD: Nguyen Van A"
                class="w-full bg-black/40 border border-white/15 rounded-lg px-3.5 py-2.5 text-white font-mono text-sm outline-none focus:border-gold">
       </div>
 
-      <div id="qr-item-choice-box">
-        <label for="qr-item-choice" class="block text-xs font-semibold text-gray-300 mb-1.5">
-          2. Chọn 1 đạo cụ DonutForge đi kèm gói:
+      <div id="qr-item-choice-box" class="hidden">
+        <label for="qr-item-choice" class="block text-xs font-semibold text-cyan-300 mb-1.5">
+          Chọn 1 đạo cụ DonutForge đi kèm gói BRIC:
         </label>
-        <select id="qr-item-choice" class="w-full bg-[#0f1420] border border-white/15 rounded-lg px-3.5 py-2.5 text-white text-sm outline-none focus:border-gold">
+        <select id="qr-item-choice" class="w-full bg-[#0f1420] border border-white/15 rounded-lg px-3.5 py-2.5 text-white text-sm outline-none focus:border-cyan-400">
           <option value="donut_pickaxe">⛏ CÚP HỦY DIỆT DONUT (Đào 3x3x1, Đào Mạch Quặng III, Tốc Đào III)</option>
           <option value="donut_sword">⚔ HUYẾT KIẾM BÁ VƯƠNG (Hút Máu IV, Lôi Phạt III, Hành Quyết IV, Kịch Độc II)</option>
           <option value="donut_mace">🔨 THẦN TRÙY CHẤN THIÊN (Phong Kích III, Trọng Lực III, Lôi Phạt IV, Hút Máu III)</option>
@@ -1639,66 +1641,6 @@
     </div>
 
     <button onclick="closePaymentModal()" class="mt-4 w-full py-2.5 rounded-xl bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white transition-all font-medium text-sm border border-white/10 cursor-pointer">
-      Đóng
-    </button>
-  </div>
-</div>
-
-    <!-- Player Ingame Name Input -->
-    <div class="mb-4">
-      <label for="qr-player-name" class="block text-xs font-semibold text-gray-300 mb-1.5">
-        Nhập tên nhân vật trong game (Gamertag) để nhận gói:
-      </label>
-      <input id="qr-player-name" type="text" maxlength="24" placeholder="VD: Steve"
-             oninput="updateQrTransferInfo()"
-             class="w-full bg-black/40 border border-white/15 rounded-lg px-3.5 py-2 text-white font-mono text-sm outline-none focus:border-gold">
-    </div>
-
-    <!-- QR Code + Bank Details -->
-    <div class="grid sm:grid-cols-12 gap-4 items-center glass rounded-xl p-4 mb-4">
-      <div class="sm:col-span-5 flex flex-col items-center">
-        <div class="bg-white p-2 rounded-xl shadow-lg w-40 h-40 flex items-center justify-center overflow-hidden">
-          <img id="qr-code-img" src="" alt="Mã QR Chuyển Khoản" class="w-full h-full object-contain">
-        </div>
-        <span class="text-[11px] text-gray-400 mt-1.5 text-center">Mở App Ngân Hàng / MoMo để quét</span>
-      </div>
-
-      <div class="sm:col-span-7 space-y-2.5 text-xs">
-        <div>
-          <div class="text-gray-500">Ngân hàng</div>
-          <div class="text-white font-semibold" id="qr-bank-name">—</div>
-        </div>
-        <div>
-          <div class="text-gray-500">Chủ tài khoản</div>
-          <div class="text-white font-semibold uppercase" id="qr-account-name">—</div>
-        </div>
-        <div class="flex items-center justify-between gap-2 bg-white/5 px-2.5 py-1.5 rounded-lg">
-          <div>
-            <div class="text-[11px] text-gray-500">Số tài khoản</div>
-            <div class="text-gold font-mono font-bold text-sm" id="qr-account-no">—</div>
-          </div>
-          <button type="button" onclick="copyBankAccount()" class="comm-btn comm-btn-ghost py-1 px-2 text-[11px]">
-            <i data-lucide="copy" class="w-3 h-3"></i> Copy
-          </button>
-        </div>
-        <div class="flex items-center justify-between gap-2 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1.5 rounded-lg">
-          <div class="min-w-0">
-            <div class="text-[11px] text-emerald-400">Nội dung chuyển khoản</div>
-            <div class="text-white font-mono font-bold text-xs truncate" id="qr-transfer-note">BRICMC VIP Steve</div>
-          </div>
-          <button type="button" onclick="copyTransferNote()" class="comm-btn comm-btn-emerald py-1 px-2 text-[11px]">
-            <i data-lucide="copy" class="w-3 h-3"></i> Copy
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <p class="text-xs text-gray-400 leading-relaxed mb-4">
-      💡 Lưu ý: Giữ nguyên <strong class="text-white">Nội dung chuyển khoản</strong> khi quét QR. Sau khi chuyển xong, gửi ảnh biên lai vào kênh
-      <a href="https://discord.gg/mRwDYFe6g" data-discord-link target="_blank" rel="noopener noreferrer" class="text-indigo-400 underline">Discord</a> để nhận gói ngay.
-    </p>
-
-    <button onclick="closePaymentModal()" class="w-full py-2.5 rounded-xl bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white transition-all font-medium text-sm border border-white/10 cursor-pointer">
       Đóng
     </button>
   </div>

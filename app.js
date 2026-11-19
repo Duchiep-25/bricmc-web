@@ -33,7 +33,8 @@ const RANKS = {
   guest:  { name: "Guest",  color: "#9ca3af", mcColor: "§7" },
   member: { name: "Member", color: "#4ade80", mcColor: "§a" },
   vip:    { name: "VIP",    color: "#facc15", mcColor: "§e" },
-  mvp:    { name: "MVP",    color: "#22d3ee", mcColor: "§b" },
+  bric:   { name: "BRIC",   color: "#22d3ee", mcColor: "§b" },
+  mvp:    { name: "MVP",    color: "#c084fc", mcColor: "§d" },
   admin:  { name: "Admin",  color: "#f87171", mcColor: "§c" },
   owner:  { name: "Owner",  color: "#dc2626", mcColor: "§4" },
 };
@@ -326,7 +327,7 @@ function updateScoreboardDisplay() {
   const playerEl = document.getElementById("sb-player-name");
 
   if (rankEl) {
-    const r = RANKS[currentRank];
+    const r = RANKS[currentRank] || RANKS.guest;
     rankEl.textContent = r.name;
     rankEl.style.color = r.color;
   }
@@ -345,7 +346,7 @@ function updateNameTag() {
   const nameLine = document.getElementById("nametag-name");
   if (!rankLine || !nameLine) return;
 
-  const r = RANKS[currentRank];
+  const r = RANKS[currentRank] || RANKS.guest;
   const t = TEAMS[currentTeam];
 
   rankLine.textContent = `[${r.name}]`;
@@ -548,7 +549,7 @@ function openPaymentModal(itemName, vndAmount, itemCode) {
   currentPaymentState = {
     itemName,
     amount: Number(vndAmount) || 0,
-    code: itemCode || "GOI",
+    code: String(itemCode || "GOI").toUpperCase(),
   };
 
   if (qrCheckTimer) {
@@ -564,11 +565,14 @@ function openPaymentModal(itemName, vndAmount, itemCode) {
     playerInput.value = currentPlayerName || "";
   }
 
-  // Chỉ hiện khung chọn đạo cụ DonutForge với các gói Rank (VIP, MVP)
-  const allowChoice = ["VIP", "MVP"].includes(currentPaymentState.code.toUpperCase());
-  document.getElementById("qr-item-choice-box")?.classList.toggle("hidden", !allowChoice);
+  // CHỈ gói BRIC mới được chọn đạo cụ DonutForge; VIP, Monney và Key đều ẩn khung này
+  const allowChoice = currentPaymentState.code === "BRIC";
+  const choiceBox = document.getElementById("qr-item-choice-box");
+  if (choiceBox) {
+    choiceBox.classList.toggle("hidden", !allowChoice);
+  }
 
-  // Đặt lại trạng thái thông báo chờ thanh toán
+  // Đặt lại thông báo trạng thái chờ thanh toán
   const statusBox = document.getElementById("qr-live-status");
   if (statusBox) {
     statusBox.className = "rounded-xl p-3 bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2";
@@ -591,7 +595,8 @@ async function createAutoQrOrder() {
     return;
   }
 
-  const allowChoice = ["VIP", "MVP"].includes(currentPaymentState.code.toUpperCase());
+  // Chỉ lấy choice_item khi gói là BRIC, các gói khác luôn gửi chuỗi rỗng
+  const allowChoice = currentPaymentState.code === "BRIC";
   const choiceItem = allowChoice ? (document.getElementById("qr-item-choice")?.value || "donut_pickaxe") : "";
 
   const btn = document.getElementById("btn-create-qr-order");
