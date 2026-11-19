@@ -15,13 +15,16 @@ const SERVER_CONFIG = {
   discordUrl: "https://discord.gg/mRwDYFe6g",
   adminPassword: "250508",
 
+  // ---- LINK API GOOGLE APPS SCRIPT (AUTO-DONATE) ----
+  donateApiUrl: "https://script.google.com/macros/s/AKfycbzmMfZXkwGqVfXVzIpjSyPzDG-kUkNFQ_XUXv7GmtsFffG7YwAkznHcaYU2XtJcF7bJeA/exec",
+
   // ---- CẤU HÌNH TÀI KHOẢN NGÂN HÀNG NHẬN MÃ QR (VIETQR) ----
   bank: {
-    bankId: "MB",                    // Mã ngân hàng: MB, VCB, TCB, ACB, BIDV, VPB, TPB, ICB, AGRIBANK...
+    bankId: "MB",
     bankDisplayName: "MB Bank (Quân Đội)",
-    accountNo: "0338837876",         // <-- THAY SỐ TÀI KHOẢN CỦA BẠN VÀO ĐÂY
-    accountName: "NGUYEN DUC HIEP",  // <-- TÊN CHỦ TÀI KHOẢN (VIẾT HOA KHÔNG DẤU)
-    customQrImage: "",               // Tùy chọn: Nếu muốn dùng ảnh QR tĩnh có sẵn, đặt file ảnh cạnh index.html và điền tên (VD: "qr.png")
+    accountNo: "0338837876",
+    accountName: "NGUYEN DUC HIEP",
+    customQrImage: "",
   },
 };
 
@@ -50,6 +53,7 @@ let currentRank = "guest";
 let currentTeam = "none";
 let currentPlayerName = "Steve";
 let isAdminUnlocked = false;
+let qrCheckTimer = null;
 let currentPaymentState = {
   itemName: "",
   amount: 0,
@@ -538,7 +542,7 @@ function previewRank(rankId) {
 }
 
 // ============================================================
-// QR PAYMENT MODAL (VIETQR / CUSTOM QR)
+// AUTO-DONATE QR PAYMENT MODAL (GOOGLE SHEETS + SEPAY)
 // ============================================================
 function openPaymentModal(itemName, vndAmount, itemCode) {
   currentPaymentState = {
@@ -547,45 +551,113 @@ function openPaymentModal(itemName, vndAmount, itemCode) {
     code: itemCode || "GOI",
   };
 
-  const modal = document.getElementById("payment-modal");
-  const modalTitle = document.getElementById("modal-item-name");
-  const modalPrice = document.getElementById("modal-item-price");
-  const playerInput = document.getElementById("qr-player-name");
-
-  if (modalTitle) modalTitle.textContent = itemName;
-  if (modalPrice) modalPrice.textContent = `${currentPaymentState.amount.toLocaleString("vi-VN")}đ`;
-  if (playerInput && !playerInput.value) {
-    playerInput.value = currentPlayerName || "Steve";
+  if (qrCheckTimer) {
+    clearInterval(qrCheckTimer);
+    qrCheckTimer = null;
   }
 
-  document.getElementById("qr-bank-name").textContent = SERVER_CONFIG.bank.bankDisplayName;
-  document.getElementById("qr-account-name").textContent = SERVER_CONFIG.bank.accountName;
-  document.getElementById("qr-account-no").textContent = SERVER_CONFIG.bank.accountNo;
+  document.getElementById("modal-item-name").textContent = itemName;
+  document.getElementById("modal-item-price").textContent = `${currentPaymentState.amount.toLocaleString("vi-VN")}đ`;
 
-  updateQrTransferInfo();
+  const playerInput = document.getElementById("qr-player-name");
+  if (playerInput && !playerInput.value) {
+    playerInput.value = currentPlayerName || "";
+  }
 
-  if (modal) modal.classList.add("show");
+  // Chỉ hiện khung chọn đạo cụ DonutForge với các gói Rank (VIP, MVP)
+  const allowChoice = ["VIP", "MVP"].includes(currentPaymentState.code.toUpperCase());
+  document.getElementById("qr-item-choice-box")?.classList.toggle("hidden", !allowChoice);
+
+  // Đặt lại trạng thái thông báo chờ thanh toán
+  const statusBox = document.getElementById("qr-live-status");
+  if (statusBox) {
+    statusBox.className = "rounded-xl p-3 bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2";
+    statusBox.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping"></span><span>Đang chờ thanh toán... Hệ thống sẽ tự động cấp đặc quyền ngay khi nhận được tiền.</span>`;
+  }
+
+  document.getElementById("qr-setup-step")?.classList.remove("hidden");
+  document.getElementById("qr-result-step")?.classList.add("hidden");
+
+  document.getElementById("payment-modal")?.classList.add("show");
   document.body.style.overflow = "hidden";
 }
 
-function updateQrTransferInfo() {
+async function createAutoQrOrder() {
   const playerInput = document.getElementById("qr-player-name");
-  const rawName = (playerInput?.value || "Steve").trim() || "Steve";
-  const cleanName = rawName.replace(/[^a-zA-Z0-9_ ]/g, "").trim() || "Steve";
-  const transferNote = `${SERVER_CONFIG.serverName} ${currentPaymentState.code} ${cleanName}`;
+  const playerName = (playerInput?.value || "").trim();
+  if (!playerName) {
+    showToast("Vui lòng nhập tên nhân vật trong game!", "warning");
+    playerInput?.focus();
+    return;
+  }
 
-  const noteEl = document.getElementById("qr-transfer-note");
-  if (noteEl) noteEl.textContent = transferNote;
+  const allowChoice = ["VIP", "MVP"].includes(currentPaymentState.code.toUpperCase());
+  const choiceItem = allowChoice ? (document.getElementById("qr-item-choice")?.value || "donut_pickaxe") : "";
 
-  const qrImg = document.getElementById("qr-code-img");
-  if (!qrImg) return;
+  const btn = document.getElementById("btn-create-qr-order");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Đang khởi tạo mã đơn QR...";
+  }
 
-  if (SERVER_CONFIG.bank.customQrImage) {
-    qrImg.src = SERVER_CONFIG.bank.customQrImage;
-  } else {
-    const { bankId, accountNo, accountName } = SERVER_CONFIG.bank;
-    const amount = currentPaymentState.amount;
-    qrImg.src = `https://img.vietqr.io/image/${encodeURIComponent(bankId)}-${encodeURIComponent(accountNo)}-compact2.png?amount=${amount}&addInfo=${encodeURIComponent(transferNote)}&accountName=${encodeURIComponent(accountName)}`;
+  try {
+    const apiUrl = SERVER_CONFIG.donateApiUrl;
+    const url = `${apiUrl}?action=create_order&player=${encodeURIComponent(playerName)}&package_id=${encodeURIComponent(currentPaymentState.code)}&choice_item=${encodeURIComponent(choiceItem)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (!data.ok) {
+      showToast(data.error || "Không thể tạo đơn hàng", "warning");
+      return;
+    }
+
+    const orderId = data.order_id;
+    const amount = Number(data.amount) || currentPaymentState.amount;
+    const { bankId, bankDisplayName, accountNo, accountName } = SERVER_CONFIG.bank;
+
+    document.getElementById("modal-item-price").textContent = `${amount.toLocaleString("vi-VN")}đ`;
+    document.getElementById("qr-bank-name").textContent = bankDisplayName;
+    document.getElementById("qr-account-name").textContent = accountName;
+    document.getElementById("qr-account-no").textContent = accountNo;
+    document.getElementById("qr-transfer-note").textContent = orderId;
+
+    const qrImg = document.getElementById("qr-code-img");
+    if (qrImg) {
+      if (SERVER_CONFIG.bank.customQrImage) {
+        qrImg.src = SERVER_CONFIG.bank.customQrImage;
+      } else {
+        qrImg.src = `https://img.vietqr.io/image/${encodeURIComponent(bankId)}-${encodeURIComponent(accountNo)}-compact2.png?amount=${amount}&addInfo=${encodeURIComponent(orderId)}&accountName=${encodeURIComponent(accountName)}`;
+      }
+    }
+
+    document.getElementById("qr-setup-step")?.classList.add("hidden");
+    document.getElementById("qr-result-step")?.classList.remove("hidden");
+
+    // Tự động kiểm tra thanh toán mỗi 3 giây
+    qrCheckTimer = setInterval(async () => {
+      try {
+        const chkRes = await fetch(`${apiUrl}?action=check_order&order_id=${encodeURIComponent(orderId)}`);
+        const chkData = await chkRes.json();
+        if (chkData.ok && (chkData.status === "PAID" || chkData.status === "CLAIMED")) {
+          clearInterval(qrCheckTimer);
+          qrCheckTimer = null;
+          const statusBox = document.getElementById("qr-live-status");
+          if (statusBox) {
+            statusBox.className = "rounded-xl p-3 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs font-semibold";
+            statusBox.innerHTML = `✅ Thanh toán thành công đơn <strong>${orderId}</strong>! Đặc quyền đang được tự động gửi vào nhân vật <strong>${playerName}</strong> trong game.`;
+          }
+          showToast("Thanh toán thành công! Hãy vào server để nhận đặc quyền.", "success");
+        }
+      } catch (_) {}
+    }, 3000);
+  } catch (err) {
+    showToast("Lỗi kết nối máy chủ thanh toán. Vui lòng thử lại!", "warning");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<i data-lucide="qr-code" class="w-4 h-4"></i> Tạo Mã QR Thanh Toán Tự Động`;
+      lucide.createIcons({ nodes: [btn] });
+    }
   }
 }
 
@@ -602,8 +674,11 @@ function copyTransferNote() {
 }
 
 function closePaymentModal() {
-  const modal = document.getElementById("payment-modal");
-  if (modal) modal.classList.remove("show");
+  if (qrCheckTimer) {
+    clearInterval(qrCheckTimer);
+    qrCheckTimer = null;
+  }
+  document.getElementById("payment-modal")?.classList.remove("show");
   document.body.style.overflow = "";
 }
 
