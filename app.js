@@ -14,18 +14,6 @@ const SERVER_CONFIG = {
   voiceChatUrl: "https://20.249.17.241.sslip.io/",
   discordUrl: "https://discord.gg/mRwDYFe6g",
   adminPassword: "250508",
-
-  // ---- LINK API GOOGLE APPS SCRIPT (AUTO-DONATE) ----
-  donateApiUrl: "https://script.google.com/macros/s/AKfycbzmMfZXkwGqVfXVzIpjSyPzDG-kUkNFQ_XUXv7GmtsFffG7YwAkznHcaYU2XtJcF7bJeA/exec",
-
-  // ---- CẤU HÌNH TÀI KHOẢN NGÂN HÀNG NHẬN MÃ QR (VIETQR) ----
-  bank: {
-    bankId: "MB",
-    bankDisplayName: "MB Bank (Quân Đội)",
-    accountNo: "0338837876",
-    accountName: "NGUYEN DUC HIEP",
-    customQrImage: "",
-  },
 };
 
 // ---- Rank Definitions ----
@@ -54,12 +42,6 @@ let currentRank = "guest";
 let currentTeam = "none";
 let currentPlayerName = "Steve";
 let isAdminUnlocked = false;
-let qrCheckTimer = null;
-let currentPaymentState = {
-  itemName: "",
-  amount: 0,
-  code: "",
-};
 
 // ============================================================
 // INIT
@@ -200,7 +182,7 @@ function showToast(message, type = "success") {
 // ============================================================
 function initNavbar() {
   const nav = document.getElementById("navbar");
-  const links = document.querySelectorAll(".nav-link");
+  const links = document.querySelectorAll('.nav-link[href^="#"]');
   const sections = document.querySelectorAll("section[id]");
 
   window.addEventListener("scroll", () => {
@@ -523,179 +505,6 @@ function initAdminFilters() {
     });
   });
 }
-
-// ============================================================
-// RANK STORE — PREVIEW
-// ============================================================
-function previewRank(rankId) {
-  if (!RANKS[rankId]) return;
-  currentRank = rankId;
-
-  document.querySelectorAll(".rank-chip").forEach((c) => {
-    c.classList.toggle("active", c.dataset.rank === rankId);
-  });
-
-  updateScoreboardDisplay();
-  updateNameTag();
-
-  document.getElementById("hero")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  showToast(`Đang xem thử Rank: [${RANKS[rankId].name}] trên NameTag`, "info");
-}
-
-// ============================================================
-// AUTO-DONATE QR PAYMENT MODAL (GOOGLE SHEETS + SEPAY)
-// ============================================================
-function openPaymentModal(itemName, vndAmount, itemCode) {
-  currentPaymentState = {
-    itemName,
-    amount: Number(vndAmount) || 0,
-    code: String(itemCode || "GOI").toUpperCase(),
-  };
-
-  if (qrCheckTimer) {
-    clearInterval(qrCheckTimer);
-    qrCheckTimer = null;
-  }
-
-  document.getElementById("modal-item-name").textContent = itemName;
-  document.getElementById("modal-item-price").textContent = `${currentPaymentState.amount.toLocaleString("vi-VN")}đ`;
-
-  const playerInput = document.getElementById("qr-player-name");
-  if (playerInput && !playerInput.value) {
-    playerInput.value = currentPlayerName || "";
-  }
-
-  // CHỈ gói BRIC mới được chọn đạo cụ DonutForge; VIP, Monney và Key đều ẩn khung này
-  const allowChoice = currentPaymentState.code === "BRIC";
-  const choiceBox = document.getElementById("qr-item-choice-box");
-  if (choiceBox) {
-    choiceBox.classList.toggle("hidden", !allowChoice);
-  }
-
-  // Đặt lại thông báo trạng thái chờ thanh toán
-  const statusBox = document.getElementById("qr-live-status");
-  if (statusBox) {
-    statusBox.className = "rounded-xl p-3 bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2";
-    statusBox.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping"></span><span>Đang chờ thanh toán... Hệ thống sẽ tự động cấp đặc quyền ngay khi nhận được tiền.</span>`;
-  }
-
-  document.getElementById("qr-setup-step")?.classList.remove("hidden");
-  document.getElementById("qr-result-step")?.classList.add("hidden");
-
-  document.getElementById("payment-modal")?.classList.add("show");
-  document.body.style.overflow = "hidden";
-}
-
-async function createAutoQrOrder() {
-  const playerInput = document.getElementById("qr-player-name");
-  const playerName = (playerInput?.value || "").trim();
-  if (!playerName) {
-    showToast("Vui lòng nhập tên nhân vật trong game!", "warning");
-    playerInput?.focus();
-    return;
-  }
-
-  // Chỉ lấy choice_item khi gói là BRIC, các gói khác luôn gửi chuỗi rỗng
-  const allowChoice = currentPaymentState.code === "BRIC";
-  const choiceItem = allowChoice ? (document.getElementById("qr-item-choice")?.value || "donut_pickaxe") : "";
-
-  const btn = document.getElementById("btn-create-qr-order");
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = "Đang khởi tạo mã đơn QR...";
-  }
-
-  try {
-    const apiUrl = SERVER_CONFIG.donateApiUrl;
-    const url = `${apiUrl}?action=create_order&player=${encodeURIComponent(playerName)}&package_id=${encodeURIComponent(currentPaymentState.code)}&choice_item=${encodeURIComponent(choiceItem)}`;
-    const res = await fetch(url);
-    const data = await res.json();
-
-    if (!data.ok) {
-      showToast(data.error || "Không thể tạo đơn hàng", "warning");
-      return;
-    }
-
-    const orderId = data.order_id;
-    const amount = Number(data.amount) || currentPaymentState.amount;
-    const { bankId, bankDisplayName, accountNo, accountName } = SERVER_CONFIG.bank;
-
-    document.getElementById("modal-item-price").textContent = `${amount.toLocaleString("vi-VN")}đ`;
-    document.getElementById("qr-bank-name").textContent = bankDisplayName;
-    document.getElementById("qr-account-name").textContent = accountName;
-    document.getElementById("qr-account-no").textContent = accountNo;
-    document.getElementById("qr-transfer-note").textContent = orderId;
-
-    const qrImg = document.getElementById("qr-code-img");
-    if (qrImg) {
-      if (SERVER_CONFIG.bank.customQrImage) {
-        qrImg.src = SERVER_CONFIG.bank.customQrImage;
-      } else {
-        qrImg.src = `https://img.vietqr.io/image/${encodeURIComponent(bankId)}-${encodeURIComponent(accountNo)}-compact2.png?amount=${amount}&addInfo=${encodeURIComponent(orderId)}&accountName=${encodeURIComponent(accountName)}`;
-      }
-    }
-
-    document.getElementById("qr-setup-step")?.classList.add("hidden");
-    document.getElementById("qr-result-step")?.classList.remove("hidden");
-
-    // Tự động kiểm tra thanh toán mỗi 3 giây
-    qrCheckTimer = setInterval(async () => {
-      try {
-        const chkRes = await fetch(`${apiUrl}?action=check_order&order_id=${encodeURIComponent(orderId)}`);
-        const chkData = await chkRes.json();
-        if (chkData.ok && (chkData.status === "PAID" || chkData.status === "CLAIMED")) {
-          clearInterval(qrCheckTimer);
-          qrCheckTimer = null;
-          const statusBox = document.getElementById("qr-live-status");
-          if (statusBox) {
-            statusBox.className = "rounded-xl p-3 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs font-semibold";
-            statusBox.innerHTML = `✅ Thanh toán thành công đơn <strong>${orderId}</strong>! Đặc quyền đang được tự động gửi vào nhân vật <strong>${playerName}</strong> trong game.`;
-          }
-          showToast("Thanh toán thành công! Hãy vào server để nhận đặc quyền.", "success");
-        }
-      } catch (_) {}
-    }, 3000);
-  } catch (err) {
-    showToast("Lỗi kết nối máy chủ thanh toán. Vui lòng thử lại!", "warning");
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = `<i data-lucide="qr-code" class="w-4 h-4"></i> Tạo Mã QR Thanh Toán Tự Động`;
-      lucide.createIcons({ nodes: [btn] });
-    }
-  }
-}
-
-function copyBankAccount() {
-  copyTextToClipboard(
-    SERVER_CONFIG.bank.accountNo,
-    `Đã sao chép số tài khoản: <strong>${SERVER_CONFIG.bank.accountNo}</strong>`
-  );
-}
-
-function copyTransferNote() {
-  const note = document.getElementById("qr-transfer-note")?.textContent || "";
-  copyTextToClipboard(note, `Đã sao chép nội dung CK: <strong>${note}</strong>`);
-}
-
-function closePaymentModal() {
-  if (qrCheckTimer) {
-    clearInterval(qrCheckTimer);
-    qrCheckTimer = null;
-  }
-  document.getElementById("payment-modal")?.classList.remove("show");
-  document.body.style.overflow = "";
-}
-
-document.addEventListener("click", (e) => {
-  if (e.target.classList.contains("modal-overlay") && e.target.classList.contains("show")) {
-    closePaymentModal();
-  }
-});
-
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closePaymentModal();
-});
 
 // ============================================================
 // SCROLL ANIMATIONS
