@@ -1,461 +1,731 @@
-// ============================================================
-// CẤU HÌNH KẾT NỐI HỆ THỐNG BRICMC
-// ============================================================
-const API_URL = "https://script.google.com/macros/s/AKfycbz56SdjDNItGzSE_fvqZ3BjNXTTD34EG0-FymEhEtnl36nCQZHbA32l_NQb4pJyHKuHUA/exec";
-const BANK_ID = "MB";               // Mã ngân hàng VietQR (VD: MB, VCB, TCB, ACB, BIDV, VPB...)
-const ACCOUNT_NO = "0123456789";    // <-- Thay bằng Số tài khoản ngân hàng liên kết SePay của bạn
-const ACCOUNT_NAME = "NGUYEN DUC HIEP"; // Tên chủ tài khoản không dấu
+/* ============================================================
+   BRICMC Web Portal — Application Logic
+   ============================================================ */
 
-let allPackages = {};
-let activeCategory = "Tất cả";
-let currentBalance = 0;
-let selectedPackage = null;
-let cardPollTimer = null;
-let qrPollTimer = null;
+// ---- Central Configuration ----
+const SERVER_CONFIG = {
+  serverName: "BRICMC",
+  ip: "bric.pikamc.vn",
+  port: "25002",
+  pricePerBlock: 5,
+  worldBorder: 40000,
+  newbieHours: 24,
+  combatSeconds: 15,
+  voiceChatUrl: "https://20.249.17.241.sslip.io/",
+  discordUrl: "https://discord.gg/mRwDYFe6g",
+  adminPassword: "250508",
 
-function formatXu(num) {
-  return Number(num || 0).toLocaleString("vi-VN") + " Xu";
-}
+  // ---- LINK API GOOGLE APPS SCRIPT (AUTO-DONATE) ----
+  donateApiUrl: "https://script.google.com/macros/s/AKfycbzmMfZXkwGqVfXVzIpjSyPzDG-kUkNFQ_XUXv7GmtsFffG7YwAkznHcaYU2XtJcF7bJeA/exec",
 
-function formatVnd(num) {
-  return Number(num || 0).toLocaleString("vi-VN") + "đ";
-}
+  // ---- CẤU HÌNH TÀI KHOẢN NGÂN HÀNG NHẬN MÃ QR (VIETQR) ----
+  bank: {
+    bankId: "MB",
+    bankDisplayName: "MB Bank (Quân Đội)",
+    accountNo: "0338837876",
+    accountName: "NGUYEN DUC HIEP",
+    customQrImage: "",
+  },
+};
 
-function getPlayerName() {
-  return document.getElementById("playerInput").value.trim();
-}
+// ---- Rank Definitions ----
+const RANKS = {
+  guest:  { name: "Guest",  color: "#9ca3af", mcColor: "§7" },
+  member: { name: "Member", color: "#4ade80", mcColor: "§a" },
+  vip:    { name: "VIP",    color: "#facc15", mcColor: "§e" },
+  bric:   { name: "BRIC",   color: "#22d3ee", mcColor: "§b" },
+  mvp:    { name: "MVP",    color: "#c084fc", mcColor: "§d" },
+  admin:  { name: "Admin",  color: "#f87171", mcColor: "§c" },
+  owner:  { name: "Owner",  color: "#dc2626", mcColor: "§4" },
+};
 
-function showCardStatus(type, msg) {
-  const box = document.getElementById("cardStatusBox");
-  box.className = "status-banner " + type;
-  box.textContent = msg;
-  box.classList.remove("hidden");
-}
+// ---- Team Definitions ----
+const TEAMS = {
+  none:    { name: "No tiem",   tag: "",          color: "#9ca3af" },
+  dragon:  { name: "Dragon",    tag: "[Dragon]",  color: "#ef4444" },
+  phoenix: { name: "Phoenix",   tag: "[Phoenix]", color: "#f59e0b" },
+  titan:   { name: "Titan",     tag: "[Titan]",   color: "#3b82f6" },
+  shadow:  { name: "Shadow",    tag: "[Shadow]",  color: "#a855f7" },
+  wolf:    { name: "Wolf",      tag: "[Wolf]",    color: "#6b7280" },
+};
 
-// ============================================================
-// TẢI DANH SÁCH GÓI & VÍ XU
-// ============================================================
-async function loadPackages() {
-  try {
-    const res = await fetch(`${API_URL}?action=get_packages`);
-    const data = await res.json();
-    if (data.ok && data.packages) {
-      allPackages = data.packages;
-      renderCategories();
-      renderPackages();
-    }
-  } catch (err) {
-    document.getElementById("packagesGrid").innerHTML =
-      `<div class="status-banner error">Không tải được danh sách gói. Vui lòng kiểm tra lại API_URL.</div>`;
-  }
-}
-
-async function refreshWallet(silent = false) {
-  const player = getPlayerName();
-  if (!player) {
-    if (!silent) alert("Vui lòng nhập tên nhân vật Minecraft của bạn!");
-    return;
-  }
-  localStorage.setItem("bricmc_player", player);
-
-  try {
-    const res = await fetch(`${API_URL}?action=get_wallet&player=${encodeURIComponent(player)}`);
-    const data = await res.json();
-    if (data.ok) {
-      currentBalance = Number(data.balance) || 0;
-      document.getElementById("walletBalance").textContent = formatXu(currentBalance);
-      document.getElementById("walletTotal").textContent = formatXu(data.total_deposited);
-      renderHistory(data.recent_topups || [], data.recent_orders || []);
-      renderPackages();
-    }
-  } catch (err) {
-    if (!silent) alert("Lỗi kết nối máy chủ khi kiểm tra ví.");
-  }
-}
-
-function renderCategories() {
-  const cats = ["Tất cả"];
-  Object.values(allPackages).forEach((pkg) => {
-    const c = pkg.category || "Khác";
-    if (!cats.includes(c)) cats.push(c);
-  });
-
-  const container = document.getElementById("categoryFilters");
-  container.innerHTML = cats
-    .map(
-      (c) =>
-        `<button class="cat-pill ${c === activeCategory ? "active" : ""}" onclick="selectCategory('${c}')">${c}</button>`
-    )
-    .join("");
-}
-
-function selectCategory(cat) {
-  activeCategory = cat;
-  renderCategories();
-  renderPackages();
-}
-
-function renderPackages() {
-  const grid = document.getElementById("packagesGrid");
-  const list = Object.values(allPackages).filter(
-    (p) => activeCategory === "Tất cả" || p.category === activeCategory
-  );
-
-  if (!list.length) {
-    grid.innerHTML = `<div class="empty-text">Chưa có gói nào trong danh mục này.</div>`;
-    return;
-  }
-
-  grid.innerHTML = list
-    .map((pkg) => {
-      const cleanDesc = pkg.description.replace(/\\n/g, "\n");
-      return `
-        <div class="pkg-card">
-          <div>
-            <span class="pkg-cat">${pkg.category}</span>
-            <h3 class="pkg-title">${pkg.name}</h3>
-            <p class="pkg-desc">${cleanDesc}</p>
-          </div>
-          <div class="pkg-footer">
-            <span class="pkg-price">${formatXu(pkg.price)}</span>
-            <button class="btn btn-primary" onclick="openBuyModal('${pkg.package_id}')">Mua Ngay</button>
-          </div>
-        </div>
-      `;
-    })
-    .join("");
-}
-
-function renderHistory(topups, orders) {
-  const topupBox = document.getElementById("topupHistoryList");
-  if (!topups.length) {
-    topupBox.innerHTML = `<p class="empty-text">Chưa có giao dịch nạp Xu nào.</p>`;
-  } else {
-    topupBox.innerHTML = topups
-      .map((t) => {
-        const isPaid = t.status === "PAID" || t.status === "SUCCESS";
-        const badge = isPaid
-          ? `<span class="badge badge-ok">+${formatXu(t.amount)}</span>`
-          : `<span class="badge badge-wait">${t.status}</span>`;
-        return `
-          <div class="history-item">
-            <div>
-              <strong>${t.topup_id}</strong> (${t.method === "CARD_VINA" ? "Thẻ Vina" : "Bank QR"})
-              <div class="hint">${t.created_at}</div>
-            </div>
-            ${badge}
-          </div>
-        `;
-      })
-      .join("");
-  }
-
-  const orderBox = document.getElementById("orderHistoryList");
-  if (!orders.length) {
-    orderBox.innerHTML = `<p class="empty-text">Chưa có đơn mua gói nào.</p>`;
-  } else {
-    orderBox.innerHTML = orders
-      .map((o) => {
-        const badge =
-          o.status === "CLAIMED"
-            ? `<span class="badge badge-ok">Đã nhận trong game</span>`
-            : `<span class="badge badge-wait">Đang phát vào game...</span>`;
-        return `
-          <div class="history-item">
-            <div>
-              <strong>${o.package_name}</strong> (${o.order_id})
-              <div class="hint">${o.created_at} • -${formatXu(o.amount)}</div>
-            </div>
-            ${badge}
-          </div>
-        `;
-      })
-      .join("");
-  }
-}
+// ---- State ----
+let currentRank = "guest";
+let currentTeam = "none";
+let currentPlayerName = "Steve";
+let isAdminUnlocked = false;
+let qrCheckTimer = null;
+let currentPaymentState = {
+  itemName: "",
+  amount: 0,
+  code: "",
+};
 
 // ============================================================
-// NẠP THẺ CÀO VINAPHONE VÀO VÍ XU
-// ============================================================
-async function submitCardTopup() {
-  const player = getPlayerName();
-  if (!player) {
-    alert("Vui lòng nhập tên nhân vật Minecraft ở Bước 1 trước!");
-    document.getElementById("playerInput").focus();
-    return;
-  }
-
-  const amount = document.getElementById("cardAmountSelect").value;
-  const serial = document.getElementById("cardSerial").value.trim();
-  const code = document.getElementById("cardCode").value.trim();
-
-  if (!serial || !code) {
-    showCardStatus("error", "Vui lòng nhập đầy đủ Số Seri và Mã thẻ cào!");
-    return;
-  }
-
-  const btn = document.getElementById("submitCardBtn");
-  btn.disabled = true;
-  btn.textContent = "Đang gửi thẻ...";
-  showCardStatus("info", "Đang kết nối cổng gạch thẻ Vinaphone...");
-
-  try {
-    const url = `${API_URL}?action=submit_card&player=${encodeURIComponent(player)}&telco=VINAPHONE&amount=${amount}&serial=${encodeURIComponent(serial)}&code=${encodeURIComponent(code)}`;
-    const res = await fetch(url);
-    const data = await res.json();
-
-    if (!data.ok) {
-      showCardStatus("error", data.error || "Thẻ bị từ chối!");
-      return;
-    }
-
-    document.getElementById("cardSerial").value = "";
-    document.getElementById("cardCode").value = "";
-
-    if (data.card_status === "SUCCESS") {
-      showCardStatus("success", `Nạp thành công! Đã cộng +${formatXu(data.amount)} vào ví của ${player}.`);
-      await refreshWallet(true);
-    } else {
-      showCardStatus("info", `Thẻ mã ${data.request_id} đang chờ nhà mạng duyệt (10–30 giây)...`);
-      startCardPolling(data.request_id);
-    }
-  } catch (err) {
-    showCardStatus("error", "Lỗi mạng khi gửi thẻ. Vui lòng thử lại!");
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Nạp Thẻ Vào Ví Ngay";
-  }
-}
-
-function startCardPolling(requestId) {
-  if (cardPollTimer) clearInterval(cardPollTimer);
-  let attempts = 0;
-
-  cardPollTimer = setInterval(async () => {
-    attempts++;
-    if (attempts > 30) {
-      clearInterval(cardPollTimer);
-      return;
-    }
-    try {
-      const res = await fetch(`${API_URL}?action=check_card&request_id=${encodeURIComponent(requestId)}`);
-      const data = await res.json();
-      if (!data.ok) return;
-
-      if (data.status === "SUCCESS") {
-        clearInterval(cardPollTimer);
-        showCardStatus("success", `Thẻ hợp lệ! Đã cộng +${formatXu(data.real_amount)} vào Ví Xu.`);
-        await refreshWallet(true);
-      } else if (data.status === "WRONG_AMOUNT") {
-        clearInterval(cardPollTimer);
-        showCardStatus("error", "Thẻ bị báo SAI MỆNH GIÁ! Vui lòng liên hệ Admin để đối soát.");
-        await refreshWallet(true);
-      } else if (data.status.startsWith("FAILED")) {
-        clearInterval(cardPollTimer);
-        showCardStatus("error", `Thẻ không hợp lệ (${data.status}). Vui lòng kiểm tra lại mã thẻ.`);
-        await refreshWallet(true);
-      }
-    } catch (e) {}
-  }, 4000);
-}
-
-// ============================================================
-// NẠP CHUYỂN KHOẢN BANK QR VÀO VÍ XU (SEPAY)
-// ============================================================
-async function createQrTopup() {
-  const player = getPlayerName();
-  if (!player) {
-    alert("Vui lòng nhập tên nhân vật Minecraft ở Bước 1 trước!");
-    document.getElementById("playerInput").focus();
-    return;
-  }
-
-  const amount = Math.floor(Number(document.getElementById("qrAmountInput").value) || 0);
-  if (amount < 10000) {
-    alert("Số tiền nạp QR tối thiểu là 10.000đ!");
-    return;
-  }
-
-  const btn = document.getElementById("createQrBtn");
-  btn.disabled = true;
-  btn.textContent = "Đang tạo QR...";
-
-  try {
-    const res = await fetch(`${API_URL}?action=create_topup&player=${encodeURIComponent(player)}&amount=${amount}`);
-    const data = await res.json();
-    if (!data.ok) {
-      alert(data.error || "Không tạo được mã QR");
-      return;
-    }
-
-    const qrUrl = `https://img.vietqr.io/image/${BANK_ID}-${ACCOUNT_NO}-compact2.png?amount=${data.amount}&addInfo=${encodeURIComponent(data.transfer_note)}&accountName=${encodeURIComponent(ACCOUNT_NAME)}`;
-    document.getElementById("qrImage").src = qrUrl;
-    document.getElementById("qrShowAmount").textContent = formatVnd(data.amount);
-    document.getElementById("qrShowNote").textContent = data.transfer_note;
-    document.getElementById("qrPollStatus").textContent = "Đang chờ hệ thống ngân hàng xác nhận tự động...";
-    document.getElementById("qrDisplayBox").classList.remove("hidden");
-
-    startQrPolling(data.topup_id);
-  } catch (err) {
-    alert("Lỗi kết nối khi tạo mã QR!");
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Tạo Mã QR Nạp Xu";
-  }
-}
-
-function startQrPolling(topupId) {
-  if (qrPollTimer) clearInterval(qrPollTimer);
-  let attempts = 0;
-
-  qrPollTimer = setInterval(async () => {
-    attempts++;
-    if (attempts > 75) {
-      clearInterval(qrPollTimer);
-      return;
-    }
-    try {
-      const res = await fetch(`${API_URL}?action=check_topup&topup_id=${encodeURIComponent(topupId)}`);
-      const data = await res.json();
-      if (data.ok && data.status === "PAID") {
-        clearInterval(qrPollTimer);
-        document.getElementById("qrPollStatus").textContent =
-          `Đã nhận thanh toán! Cộng +${formatXu(data.amount)} vào Ví Xu thành công.`;
-        await refreshWallet(true);
-      }
-    } catch (e) {}
-  }, 4000);
-}
-
-// ============================================================
-// MUA GÓI BẰNG SỐ DƯ VÍ XU
-// ============================================================
-async function openBuyModal(packageId) {
-  const player = getPlayerName();
-  if (!player) {
-    alert("Vui lòng nhập tên nhân vật Minecraft ở Bước 1 trước!");
-    document.getElementById("playerInput").focus();
-    return;
-  }
-
-  await refreshWallet(true);
-  selectedPackage = allPackages[packageId];
-  if (!selectedPackage) return;
-
-  document.getElementById("modalPkgName").textContent = selectedPackage.name;
-  document.getElementById("modalPkgDesc").textContent = selectedPackage.description.replace(/\\n/g, "\n");
-  document.getElementById("modalPkgPrice").textContent = formatXu(selectedPackage.price);
-  document.getElementById("modalCurBalance").textContent = formatXu(currentBalance);
-
-  const choiceWrap = document.getElementById("choiceWrapper");
-  if (selectedPackage.allow_choice) {
-    choiceWrap.classList.remove("hidden");
-  } else {
-    choiceWrap.classList.add("hidden");
-  }
-
-  const alertBox = document.getElementById("modalAlert");
-  const confirmBtn = document.getElementById("confirmBuyBtn");
-
-  if (currentBalance < selectedPackage.price) {
-    const missing = selectedPackage.price - currentBalance;
-    alertBox.className = "status-banner error";
-    alertBox.textContent = `Bạn còn thiếu ${formatXu(missing)}. Hãy nạp thêm thẻ cào hoặc QR ở Bước 2!`;
-    alertBox.classList.remove("hidden");
-    confirmBtn.textContent = "Nạp Thêm Xu Ngay";
-  } else {
-    alertBox.classList.add("hidden");
-    confirmBtn.textContent = "Thanh Toán Bằng Ví Xu";
-  }
-
-  document.getElementById("buyModal").classList.remove("hidden");
-}
-
-async function handleConfirmBuy() {
-  if (!selectedPackage) return;
-  const player = getPlayerName();
-
-  // Nếu thiếu tiền -> đóng modal và cuộn lên khung nạp tiền
-  if (currentBalance < selectedPackage.price) {
-    document.getElementById("buyModal").classList.add("hidden");
-    document.getElementById("topupSection").scrollIntoView({ behavior: "smooth" });
-    return;
-  }
-
-  const btn = document.getElementById("confirmBuyBtn");
-  btn.disabled = true;
-  btn.textContent = "Đang xử lý...";
-
-  const choice = selectedPackage.allow_choice ? document.getElementById("choiceSelect").value : "";
-
-  try {
-    const url = `${API_URL}?action=buy_package&player=${encodeURIComponent(player)}&package_id=${encodeURIComponent(selectedPackage.package_id)}&choice_item=${encodeURIComponent(choice)}`;
-    const res = await fetch(url);
-    const data = await res.json();
-
-    const alertBox = document.getElementById("modalAlert");
-    if (!data.ok) {
-      alertBox.className = "status-banner error";
-      alertBox.textContent = data.error || "Không thể hoàn tất giao dịch!";
-      alertBox.classList.remove("hidden");
-      return;
-    }
-
-    alertBox.className = "status-banner success";
-    alertBox.textContent = `Mua thành công ${data.package_name} (Mã đơn: ${data.order_id})! Vật phẩm sẽ tự động gửi vào game sau vài giây.`;
-    alertBox.classList.remove("hidden");
-    await refreshWallet(true);
-    document.getElementById("modalCurBalance").textContent = formatXu(currentBalance);
-  } catch (err) {
-    alert("Lỗi kết nối máy chủ khi thanh toán!");
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Thanh Toán Bằng Ví Xu";
-  }
-}
-
-// ============================================================
-// KHỞI TẠO SỰ KIỆN TRANG
+// INIT
 // ============================================================
 document.addEventListener("DOMContentLoaded", () => {
-  const savedPlayer = localStorage.getItem("bricmc_player");
-  if (savedPlayer) {
-    document.getElementById("playerInput").value = savedPlayer;
-    refreshWallet(true);
+  applyServerConfig();
+  restoreAdminSession();
+  lucide.createIcons();
+  initNavbar();
+  initMobileMenu();
+  initScoreboard();
+  initLandCalculator();
+  initWikiTabs();
+  initCommandSearch();
+  initAdminFilters();
+  initScrollAnimations();
+  initSmoothScroll();
+  updateLandCalc();
+});
+
+// ============================================================
+// AUTO-SYNC DOM FROM SERVER_CONFIG
+// ============================================================
+function applyServerConfig() {
+  document.title = `${SERVER_CONFIG.serverName} — Máy Chủ Minecraft Bedrock Sinh Tồn & PvP`;
+
+  document.querySelectorAll("[data-server-name]").forEach((el) => {
+    el.textContent = SERVER_CONFIG.serverName;
+  });
+
+  document.querySelectorAll("[data-ip-only]").forEach((el) => {
+    el.textContent = SERVER_CONFIG.ip;
+  });
+  document.querySelectorAll("[data-port-only]").forEach((el) => {
+    el.textContent = SERVER_CONFIG.port;
+  });
+  document.querySelectorAll("[data-ip-port]").forEach((el) => {
+    el.textContent = `${SERVER_CONFIG.ip}:${SERVER_CONFIG.port}`;
+  });
+
+  const ipDisplay = document.getElementById("ip-display");
+  if (ipDisplay) {
+    ipDisplay.innerHTML = `<span data-ip-only>${SERVER_CONFIG.ip}</span><span class="text-gray-500">:</span><span data-port-only>${SERVER_CONFIG.port}</span>`;
   }
 
-  loadPackages();
-
-  document.getElementById("checkWalletBtn").addEventListener("click", () => refreshWallet(false));
-  document.getElementById("submitCardBtn").addEventListener("click", submitCardTopup);
-  document.getElementById("createQrBtn").addEventListener("click", createQrTopup);
-  document.getElementById("closeModalBtn").addEventListener("click", () => {
-    document.getElementById("buyModal").classList.add("hidden");
+  document.querySelectorAll("[data-voice-link]").forEach((el) => {
+    el.setAttribute("href", SERVER_CONFIG.voiceChatUrl);
   });
-  document.getElementById("confirmBuyBtn").addEventListener("click", handleConfirmBuy);
-
-  document.getElementById("copyNoteBtn").addEventListener("click", () => {
-    const note = document.getElementById("qrShowNote").textContent;
-    navigator.clipboard.writeText(note);
-    alert("Đã copy nội dung chuyển khoản: " + note);
+  document.querySelectorAll("[data-voice-url-text]").forEach((el) => {
+    el.textContent = SERVER_CONFIG.voiceChatUrl;
   });
 
-  // Chuyển Tab Thẻ Cào / QR
-  document.querySelectorAll(".tab-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
-      document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
-      btn.classList.add("active");
-      document.getElementById(btn.dataset.tab).classList.add("active");
+  document.querySelectorAll("[data-discord-link]").forEach((el) => {
+    el.setAttribute("href", SERVER_CONFIG.discordUrl);
+  });
+  document.querySelectorAll("[data-discord-url-text]").forEach((el) => {
+    el.textContent = SERVER_CONFIG.discordUrl;
+  });
+
+  document.querySelectorAll("[data-price-per-block]").forEach((el) => {
+    el.textContent = `$${SERVER_CONFIG.pricePerBlock} / block`;
+  });
+  document.querySelectorAll("[data-world-border]").forEach((el) => {
+    el.textContent = `±${SERVER_CONFIG.worldBorder.toLocaleString("vi-VN")} block`;
+  });
+}
+
+// ============================================================
+// ADMIN PASSWORD LOCK / UNLOCK (250508)
+// ============================================================
+function restoreAdminSession() {
+  if (sessionStorage.getItem("bricmc_admin_unlocked") === "true") {
+    isAdminUnlocked = true;
+    const lockScreen = document.getElementById("admin-lock-screen");
+    const unlockedContent = document.getElementById("admin-unlocked-content");
+    if (lockScreen) lockScreen.classList.add("hidden");
+    if (unlockedContent) unlockedContent.classList.remove("hidden");
+  }
+}
+
+function unlockAdminPanel(e) {
+  if (e) e.preventDefault();
+  const inputEl = document.getElementById("admin-password-input");
+  const errorEl = document.getElementById("admin-password-error");
+  if (!inputEl) return;
+
+  if (inputEl.value.trim() === SERVER_CONFIG.adminPassword) {
+    isAdminUnlocked = true;
+    sessionStorage.setItem("bricmc_admin_unlocked", "true");
+    if (errorEl) errorEl.classList.add("hidden");
+    inputEl.value = "";
+
+    document.getElementById("admin-lock-screen")?.classList.add("hidden");
+    document.getElementById("admin-unlocked-content")?.classList.remove("hidden");
+    showToast("Đã mở khóa khu vực Quản Trị Viên!", "success");
+  } else {
+    if (errorEl) errorEl.classList.remove("hidden");
+    inputEl.focus();
+    inputEl.select();
+  }
+}
+
+function lockAdminPanel() {
+  isAdminUnlocked = false;
+  sessionStorage.removeItem("bricmc_admin_unlocked");
+  document.getElementById("admin-unlocked-content")?.classList.add("hidden");
+  document.getElementById("admin-lock-screen")?.classList.remove("hidden");
+  showToast("Đã khóa khu vực Admin.", "info");
+}
+
+function toggleAdminPasswordVisibility() {
+  const inputEl = document.getElementById("admin-password-input");
+  if (!inputEl) return;
+  inputEl.type = inputEl.type === "password" ? "text" : "password";
+}
+
+// ============================================================
+// TOAST
+// ============================================================
+function showToast(message, type = "success") {
+  const container = document.getElementById("toast-container");
+  const toast = document.createElement("div");
+  toast.className = `toast ${type}`;
+
+  const icons = { success: "check-circle", info: "info", warning: "alert-triangle" };
+  toast.innerHTML = `<i data-lucide="${icons[type] || 'info'}" style="width:16px;height:16px"></i><span>${message}</span>`;
+  container.appendChild(toast);
+  lucide.createIcons({ nodes: [toast] });
+
+  setTimeout(() => {
+    toast.classList.add("toast-exit");
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+
+// ============================================================
+// NAVBAR
+// ============================================================
+function initNavbar() {
+  const nav = document.getElementById("navbar");
+  const links = document.querySelectorAll(".nav-link");
+  const sections = document.querySelectorAll("section[id]");
+
+  window.addEventListener("scroll", () => {
+    nav.classList.toggle("scrolled", window.scrollY > 50);
+
+    let current = "";
+    sections.forEach((sec) => {
+      if (window.scrollY >= sec.offsetTop - 120) current = sec.id;
+    });
+    links.forEach((link) => {
+      link.classList.toggle("active", link.getAttribute("href") === `#${current}`);
     });
   });
+}
 
-  // Chọn nhanh mệnh giá QR
-  document.querySelectorAll(".amt-chip").forEach((chip) => {
+// ============================================================
+// MOBILE MENU
+// ============================================================
+function initMobileMenu() {
+  const btn = document.getElementById("mobile-menu-btn");
+  const menu = document.getElementById("mobile-menu");
+  if (!btn || !menu) return;
+
+  btn.addEventListener("click", () => {
+    menu.classList.toggle("open");
+    const isOpen = menu.classList.contains("open");
+    btn.setAttribute("aria-expanded", isOpen);
+    document.body.style.overflow = isOpen ? "hidden" : "";
+  });
+
+  menu.querySelectorAll("a").forEach((a) => {
+    a.addEventListener("click", () => {
+      menu.classList.remove("open");
+      document.body.style.overflow = "";
+    });
+  });
+}
+
+// ============================================================
+// CLIPBOARD HELPERS
+// ============================================================
+function copyTextToClipboard(text, successHtml) {
+  navigator.clipboard.writeText(text).then(() => {
+    showToast(successHtml, "success");
+  }).catch(() => {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+    showToast(successHtml, "success");
+  });
+}
+
+function copyIP() {
+  const text = `${SERVER_CONFIG.ip}:${SERVER_CONFIG.port}`;
+  copyTextToClipboard(text, `Đã sao chép IP & Port: <strong>${text}</strong>`);
+}
+
+function copyVoiceUrl() {
+  copyTextToClipboard(
+    SERVER_CONFIG.voiceChatUrl,
+    `Đã sao chép link Voice Chat: <strong>${SERVER_CONFIG.voiceChatUrl}</strong>`
+  );
+}
+
+function copyDiscordUrl() {
+  copyTextToClipboard(
+    SERVER_CONFIG.discordUrl,
+    `Đã sao chép link Discord: <strong>${SERVER_CONFIG.discordUrl}</strong>`
+  );
+}
+
+// ============================================================
+// OPEN MINECRAFT
+// ============================================================
+function openMinecraft() {
+  const url = `minecraft://?addExternalServer=${SERVER_CONFIG.serverName}|${SERVER_CONFIG.ip}:${SERVER_CONFIG.port}`;
+  window.location.href = url;
+  showToast("Đang mở Minecraft... Nếu không tự mở, hãy thêm server thủ công.", "info");
+}
+
+// ============================================================
+// SCOREBOARD INTERACTIVITY
+// ============================================================
+function initScoreboard() {
+  const nameInput = document.getElementById("sb-player-input");
+  if (nameInput) {
+    nameInput.addEventListener("input", (e) => {
+      currentPlayerName = e.target.value || "Steve";
+      updateScoreboardDisplay();
+      updateNameTag();
+    });
+  }
+
+  document.querySelectorAll(".rank-chip").forEach((chip) => {
     chip.addEventListener("click", () => {
-      document.querySelectorAll(".amt-chip").forEach((c) => c.classList.remove("active"));
+      document.querySelectorAll(".rank-chip").forEach((c) => c.classList.remove("active"));
       chip.classList.add("active");
-      document.getElementById("qrAmountInput").value = chip.dataset.amt;
+      currentRank = chip.dataset.rank;
+      updateScoreboardDisplay();
+      updateNameTag();
     });
   });
+
+  document.querySelectorAll(".team-chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      document.querySelectorAll(".team-chip").forEach((c) => c.classList.remove("active", "active-team"));
+      chip.classList.add("active-team");
+      currentTeam = chip.dataset.team;
+      updateScoreboardDisplay();
+      updateNameTag();
+    });
+  });
+
+  updateScoreboardDisplay();
+  updateNameTag();
+}
+
+function updateScoreboardDisplay() {
+  const rankEl = document.getElementById("sb-rank-value");
+  const teamEl = document.getElementById("sb-team-value");
+  const playerEl = document.getElementById("sb-player-name");
+
+  if (rankEl) {
+    const r = RANKS[currentRank] || RANKS.guest;
+    rankEl.textContent = r.name;
+    rankEl.style.color = r.color;
+  }
+  if (teamEl) {
+    const t = TEAMS[currentTeam];
+    teamEl.textContent = t.tag || "No tiem";
+    teamEl.style.color = t.color;
+  }
+  if (playerEl) {
+    playerEl.textContent = currentPlayerName;
+  }
+}
+
+function updateNameTag() {
+  const rankLine = document.getElementById("nametag-rank");
+  const nameLine = document.getElementById("nametag-name");
+  if (!rankLine || !nameLine) return;
+
+  const r = RANKS[currentRank] || RANKS.guest;
+  const t = TEAMS[currentTeam];
+
+  rankLine.textContent = `[${r.name}]`;
+  rankLine.style.color = r.color;
+
+  nameLine.innerHTML = "";
+  if (t.tag) {
+    const teamSpan = document.createElement("span");
+    teamSpan.textContent = t.tag + " ";
+    teamSpan.style.color = t.color;
+    nameLine.appendChild(teamSpan);
+  }
+  const nameSpan = document.createElement("span");
+  nameSpan.textContent = currentPlayerName;
+  nameSpan.style.color = "#fff";
+  nameLine.appendChild(nameSpan);
+}
+
+// ============================================================
+// LAND CALCULATOR
+// ============================================================
+function initLandCalculator() {
+  const widthSlider = document.getElementById("land-width");
+  const lengthSlider = document.getElementById("land-length");
+  const widthInput = document.getElementById("land-width-num");
+  const lengthInput = document.getElementById("land-length-num");
+
+  if (widthSlider) {
+    widthSlider.addEventListener("input", () => {
+      widthInput.value = widthSlider.value;
+      clearActivePkg();
+      updateLandCalc();
+    });
+  }
+  if (lengthSlider) {
+    lengthSlider.addEventListener("input", () => {
+      lengthInput.value = lengthSlider.value;
+      clearActivePkg();
+      updateLandCalc();
+    });
+  }
+  if (widthInput) {
+    widthInput.addEventListener("change", () => {
+      let v = Math.max(5, Math.min(150, parseInt(widthInput.value) || 5));
+      widthInput.value = v;
+      widthSlider.value = v;
+      clearActivePkg();
+      updateLandCalc();
+    });
+  }
+  if (lengthInput) {
+    lengthInput.addEventListener("change", () => {
+      let v = Math.max(5, Math.min(150, parseInt(lengthInput.value) || 5));
+      lengthInput.value = v;
+      lengthSlider.value = v;
+      clearActivePkg();
+      updateLandCalc();
+    });
+  }
+}
+
+function setLandPackage(w, l, btnEl) {
+  document.getElementById("land-width").value = w;
+  document.getElementById("land-length").value = l;
+  document.getElementById("land-width-num").value = w;
+  document.getElementById("land-length-num").value = l;
+
+  document.querySelectorAll(".land-pkg-btn").forEach((b) => b.classList.remove("active"));
+  if (btnEl) btnEl.classList.add("active");
+
+  updateLandCalc();
+}
+
+function clearActivePkg() {
+  document.querySelectorAll(".land-pkg-btn").forEach((b) => b.classList.remove("active"));
+}
+
+function updateLandCalc() {
+  const w = parseInt(document.getElementById("land-width")?.value) || 15;
+  const l = parseInt(document.getElementById("land-length")?.value) || 15;
+  const totalBlocks = w * l;
+  const totalCost = totalBlocks * SERVER_CONFIG.pricePerBlock;
+  const refund = Math.floor(totalCost * 0.7);
+
+  const blocksEl = document.getElementById("result-blocks");
+  const costEl = document.getElementById("result-cost");
+  const refundEl = document.getElementById("result-refund");
+  const dimAEl = document.getElementById("land-dim-a");
+  const dimBEl = document.getElementById("land-dim-b");
+
+  if (blocksEl) blocksEl.textContent = totalBlocks.toLocaleString("vi-VN");
+  if (costEl) costEl.textContent = `$${totalCost.toLocaleString("vi-VN")}`;
+  if (refundEl) refundEl.textContent = `$${refund.toLocaleString("vi-VN")}`;
+  if (dimAEl) dimAEl.textContent = `${w} block`;
+  if (dimBEl) dimBEl.textContent = `${l} block`;
+}
+
+// ============================================================
+// WIKI TABS
+// ============================================================
+function initWikiTabs() {
+  document.querySelectorAll(".wiki-tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const target = btn.dataset.tab;
+      document.querySelectorAll(".wiki-tab-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      document.querySelectorAll(".wiki-panel").forEach((p) => {
+        p.classList.toggle("hidden", p.id !== target);
+      });
+      if (target === "admin-panel" && !isAdminUnlocked) {
+        setTimeout(() => document.getElementById("admin-password-input")?.focus(), 100);
+      }
+    });
+  });
+}
+
+// ============================================================
+// COMMAND SEARCH
+// ============================================================
+function initCommandSearch() {
+  const searchInput = document.getElementById("command-search");
+  if (!searchInput) return;
+
+  searchInput.addEventListener("input", () => {
+    const query = searchInput.value.toLowerCase().trim();
+    document.querySelectorAll(".cmd-row").forEach((row) => {
+      const cmd = row.querySelector(".cmd-code")?.textContent.toLowerCase() || "";
+      const desc = row.querySelector(".cmd-desc")?.textContent.toLowerCase() || "";
+      row.style.display = !query || cmd.includes(query) || desc.includes(query) ? "" : "none";
+    });
+    document.querySelectorAll(".cmd-group").forEach((group) => {
+      const hasVisible = Array.from(group.querySelectorAll(".cmd-row")).some(
+        (r) => r.style.display !== "none"
+      );
+      const title = group.querySelector(".cmd-group-title");
+      if (title) title.style.display = hasVisible ? "" : "none";
+    });
+  });
+}
+
+function copyCommand(cmd) {
+  copyTextToClipboard(cmd, `Đã sao chép lệnh <code>${cmd}</code>`);
+}
+
+// ============================================================
+// ADMIN FILTER BUTTONS
+// ============================================================
+function initAdminFilters() {
+  document.querySelectorAll(".admin-filter-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const filter = btn.dataset.filter;
+      const isAll = filter === "all";
+
+      if (isAll) {
+        document.querySelectorAll(".admin-filter-btn").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+      } else {
+        document.querySelector('.admin-filter-btn[data-filter="all"]')?.classList.remove("active");
+        btn.classList.toggle("active");
+      }
+
+      const activeFilters = Array.from(document.querySelectorAll(".admin-filter-btn.active")).map(
+        (b) => b.dataset.filter
+      );
+
+      document.querySelectorAll("#admin-unlocked-content .cmd-group").forEach((group) => {
+        const groupPlugin = group.dataset.plugin;
+        if (activeFilters.includes("all") || activeFilters.length === 0) {
+          group.style.display = "";
+        } else {
+          group.style.display = activeFilters.includes(groupPlugin) ? "" : "none";
+        }
+      });
+    });
+  });
+}
+
+// ============================================================
+// RANK STORE — PREVIEW
+// ============================================================
+function previewRank(rankId) {
+  if (!RANKS[rankId]) return;
+  currentRank = rankId;
+
+  document.querySelectorAll(".rank-chip").forEach((c) => {
+    c.classList.toggle("active", c.dataset.rank === rankId);
+  });
+
+  updateScoreboardDisplay();
+  updateNameTag();
+
+  document.getElementById("hero")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  showToast(`Đang xem thử Rank: [${RANKS[rankId].name}] trên NameTag`, "info");
+}
+
+// ============================================================
+// AUTO-DONATE QR PAYMENT MODAL (GOOGLE SHEETS + SEPAY)
+// ============================================================
+function openPaymentModal(itemName, vndAmount, itemCode) {
+  currentPaymentState = {
+    itemName,
+    amount: Number(vndAmount) || 0,
+    code: String(itemCode || "GOI").toUpperCase(),
+  };
+
+  if (qrCheckTimer) {
+    clearInterval(qrCheckTimer);
+    qrCheckTimer = null;
+  }
+
+  document.getElementById("modal-item-name").textContent = itemName;
+  document.getElementById("modal-item-price").textContent = `${currentPaymentState.amount.toLocaleString("vi-VN")}đ`;
+
+  const playerInput = document.getElementById("qr-player-name");
+  if (playerInput && !playerInput.value) {
+    playerInput.value = currentPlayerName || "";
+  }
+
+  // CHỈ gói BRIC mới được chọn đạo cụ DonutForge; VIP, Monney và Key đều ẩn khung này
+  const allowChoice = currentPaymentState.code === "BRIC";
+  const choiceBox = document.getElementById("qr-item-choice-box");
+  if (choiceBox) {
+    choiceBox.classList.toggle("hidden", !allowChoice);
+  }
+
+  // Đặt lại thông báo trạng thái chờ thanh toán
+  const statusBox = document.getElementById("qr-live-status");
+  if (statusBox) {
+    statusBox.className = "rounded-xl p-3 bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2";
+    statusBox.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping"></span><span>Đang chờ thanh toán... Hệ thống sẽ tự động cấp đặc quyền ngay khi nhận được tiền.</span>`;
+  }
+
+  document.getElementById("qr-setup-step")?.classList.remove("hidden");
+  document.getElementById("qr-result-step")?.classList.add("hidden");
+
+  document.getElementById("payment-modal")?.classList.add("show");
+  document.body.style.overflow = "hidden";
+}
+
+async function createAutoQrOrder() {
+  const playerInput = document.getElementById("qr-player-name");
+  const playerName = (playerInput?.value || "").trim();
+  if (!playerName) {
+    showToast("Vui lòng nhập tên nhân vật trong game!", "warning");
+    playerInput?.focus();
+    return;
+  }
+
+  // Chỉ lấy choice_item khi gói là BRIC, các gói khác luôn gửi chuỗi rỗng
+  const allowChoice = currentPaymentState.code === "BRIC";
+  const choiceItem = allowChoice ? (document.getElementById("qr-item-choice")?.value || "donut_pickaxe") : "";
+
+  const btn = document.getElementById("btn-create-qr-order");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Đang khởi tạo mã đơn QR...";
+  }
+
+  try {
+    const apiUrl = SERVER_CONFIG.donateApiUrl;
+    const url = `${apiUrl}?action=create_order&player=${encodeURIComponent(playerName)}&package_id=${encodeURIComponent(currentPaymentState.code)}&choice_item=${encodeURIComponent(choiceItem)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (!data.ok) {
+      showToast(data.error || "Không thể tạo đơn hàng", "warning");
+      return;
+    }
+
+    const orderId = data.order_id;
+    const amount = Number(data.amount) || currentPaymentState.amount;
+    const { bankId, bankDisplayName, accountNo, accountName } = SERVER_CONFIG.bank;
+
+    document.getElementById("modal-item-price").textContent = `${amount.toLocaleString("vi-VN")}đ`;
+    document.getElementById("qr-bank-name").textContent = bankDisplayName;
+    document.getElementById("qr-account-name").textContent = accountName;
+    document.getElementById("qr-account-no").textContent = accountNo;
+    document.getElementById("qr-transfer-note").textContent = orderId;
+
+    const qrImg = document.getElementById("qr-code-img");
+    if (qrImg) {
+      if (SERVER_CONFIG.bank.customQrImage) {
+        qrImg.src = SERVER_CONFIG.bank.customQrImage;
+      } else {
+        qrImg.src = `https://img.vietqr.io/image/${encodeURIComponent(bankId)}-${encodeURIComponent(accountNo)}-compact2.png?amount=${amount}&addInfo=${encodeURIComponent(orderId)}&accountName=${encodeURIComponent(accountName)}`;
+      }
+    }
+
+    document.getElementById("qr-setup-step")?.classList.add("hidden");
+    document.getElementById("qr-result-step")?.classList.remove("hidden");
+
+    // Tự động kiểm tra thanh toán mỗi 3 giây
+    qrCheckTimer = setInterval(async () => {
+      try {
+        const chkRes = await fetch(`${apiUrl}?action=check_order&order_id=${encodeURIComponent(orderId)}`);
+        const chkData = await chkRes.json();
+        if (chkData.ok && (chkData.status === "PAID" || chkData.status === "CLAIMED")) {
+          clearInterval(qrCheckTimer);
+          qrCheckTimer = null;
+          const statusBox = document.getElementById("qr-live-status");
+          if (statusBox) {
+            statusBox.className = "rounded-xl p-3 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs font-semibold";
+            statusBox.innerHTML = `✅ Thanh toán thành công đơn <strong>${orderId}</strong>! Đặc quyền đang được tự động gửi vào nhân vật <strong>${playerName}</strong> trong game.`;
+          }
+          showToast("Thanh toán thành công! Hãy vào server để nhận đặc quyền.", "success");
+        }
+      } catch (_) {}
+    }, 3000);
+  } catch (err) {
+    showToast("Lỗi kết nối máy chủ thanh toán. Vui lòng thử lại!", "warning");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<i data-lucide="qr-code" class="w-4 h-4"></i> Tạo Mã QR Thanh Toán Tự Động`;
+      lucide.createIcons({ nodes: [btn] });
+    }
+  }
+}
+
+function copyBankAccount() {
+  copyTextToClipboard(
+    SERVER_CONFIG.bank.accountNo,
+    `Đã sao chép số tài khoản: <strong>${SERVER_CONFIG.bank.accountNo}</strong>`
+  );
+}
+
+function copyTransferNote() {
+  const note = document.getElementById("qr-transfer-note")?.textContent || "";
+  copyTextToClipboard(note, `Đã sao chép nội dung CK: <strong>${note}</strong>`);
+}
+
+function closePaymentModal() {
+  if (qrCheckTimer) {
+    clearInterval(qrCheckTimer);
+    qrCheckTimer = null;
+  }
+  document.getElementById("payment-modal")?.classList.remove("show");
+  document.body.style.overflow = "";
+}
+
+document.addEventListener("click", (e) => {
+  if (e.target.classList.contains("modal-overlay") && e.target.classList.contains("show")) {
+    closePaymentModal();
+  }
 });
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closePaymentModal();
+});
+
+// ============================================================
+// SCROLL ANIMATIONS
+// ============================================================
+function initScrollAnimations() {
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("visible");
+        }
+      });
+    },
+    { threshold: 0.1, rootMargin: "0px 0px -50px 0px" }
+  );
+
+  document.querySelectorAll(".fade-up").forEach((el) => observer.observe(el));
+}
+
+// ============================================================
+// SMOOTH SCROLL
+// ============================================================
+function initSmoothScroll() {
+  document.querySelectorAll('a[href^="#"]').forEach((link) => {
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      const target = document.querySelector(link.getAttribute("href"));
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth" });
+      }
+    });
+  });
+}
